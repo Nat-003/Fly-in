@@ -92,3 +92,62 @@ class Connection:
             return self.zone_a
         else:
             raise ValueError('zone is not an endpoint of this connection')
+
+
+class Graph:
+    def __init__(self) -> None:
+        self.nb_drones = 0
+        self.zones: dict[str, Zone] = {}
+        self.adjacency: dict[str, list[Connection]] = {}
+        self.start: Zone | None = None
+        self.end: Zone | None = None
+        self.seen_connections: set[tuple[str, str]] = set()
+
+    def add_zone(
+        self,
+        zone: Zone,
+        is_start: bool = False,
+        is_end: bool = False,
+    ) -> None:
+        if zone.name in self.zones:
+            raise ValueError(f'duplicate zone name: {zone.name}')
+        if is_start:
+            if self.start is not None:
+                raise ValueError('more than one start zone')
+            self.start = zone
+        if is_end:
+            if self.end is not None:
+                raise ValueError('more than one end zone')
+            self.end = zone
+        self.zones[zone.name] = zone
+        self.adjacency[zone.name] = []
+
+    def add_connection(self, connection: Connection) -> None:
+        key = connection.normalized_key()
+        if key in self.seen_connections:
+            raise ValueError('duplicate connection')
+        if connection.zone_a.name not in self.zones:
+            raise ValueError(f'unknown zone: {connection.zone_a.name}')
+        if connection.zone_b.name not in self.zones:
+            raise ValueError(f'unknown zone: {connection.zone_b.name}')
+        self.seen_connections.add(key)
+        self.adjacency[connection.zone_a.name].append(connection)
+        self.adjacency[connection.zone_b.name].append(connection)
+
+    def get_zone(self, name: str) -> Zone:
+        zone = self.zones.get(name)
+        if zone is None:
+            raise ValueError(f'{name} not found in zones')
+        return zone
+
+    def get_neighbors(self, zone: Zone) -> list[Zone]:
+        neighbors = []
+        for connection in self.adjacency[zone.name]:
+            neighbors.append(connection.end_point(zone))
+        return neighbors
+
+    def validate(self) -> None:
+        if self.start is None:
+            raise ValueError('no start zone')
+        if self.end is None:
+            raise ValueError('no end zone')
