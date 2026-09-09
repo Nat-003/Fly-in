@@ -151,3 +151,5 @@ class Graph:
             raise ValueError('no start zone')
         if self.end is None:
             raise ValueError('no end zone')
+        if self.nb_drones <= 1:
+            raise ValueError("Number of drones cannot be less than 1")
