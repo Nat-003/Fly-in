@@ -9,8 +9,8 @@ def main():
         parser = Parser("maps/easy/01_linear_path.txt")
         graph =  parser.parse()
         # print(graph.nb_drones)
-        start = graph.get_zone("goal")
-        # print(start.coords)
+        start = graph.get_zone("start")
+        # print(start.max_cap)
     except ValueError as e:
         print(e)
 if __name__ == "__main__":
