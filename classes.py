@@ -1,3 +1,5 @@
+from typing import Any 
+
 class Zone:
     VALID_ZONE = ('normal', 'restricted', 'priority', 'blocked')
 
@@ -153,3 +155,82 @@ class Graph:
             raise ValueError('no end zone')
         if self.nb_drones <= 1:
             raise ValueError("Number of drones cannot be less than 1")
+
+
+class Drone:
+    def __init__(self, id: int, path: list[Zone]) -> None:
+        self.id = id
+        self.path = path
+        self.path_index = 0
+
+    def get_current_zone(self) -> Zone:
+        return self.path[self.path_index]
+
+    def get_next_zone(self) -> Zone | None:
+        if not self.has_arrived():
+            return self.path[self.path_index + 1]
+        else:
+            return None
+
+    def move(self) -> None:
+        self.path_index += 1
+
+    def has_arrived(self) -> bool:
+        if self.path_index == len(self.path) - 1:
+            return True
+        else:
+            return False
+
+
+class Simulation:
+    def __init__(self, graph: Graph, pathfinder: Any):
+        self.graph = graph
+        self.pathfinder = pathfinder
+        self.path = pathfinder.find_path()
+        self.drones: list[Drone] = []
+        self.create_drones()
+        self.turn_count = 0
+
+    def create_drones(self) -> None:
+        for n in range(1, self.graph.nb_drones + 1):
+            self.drones.append(Drone(n, self.path))
+
+
+    def all_arrived(self) -> bool:
+        return all(d.has_arrived() for d in self.drones)
+
+    def take_turn(self):
+        to_move = []
+        output_lines = []
+        projected = {zone: zone.occupancy() for zone in self.graph.zones.values()}
+        for d in sorted(self.drones, key=lambda dr: dr.path_index, reverse=True):
+            if d.has_arrived():
+                continue
+            current = d.get_current_zone()
+            next_zone = d.get_next_zone()
+            if next_zone == self.graph.end:
+                to_move.append((d, current, next_zone))
+                projected[current] -= 1
+                projected[next_zone] += 1
+            elif projected[next_zone] < next_zone.max_cap:
+                to_move.append((d, current, next_zone))
+                projected[current] -= 1
+                projected[next_zone] += 1
+        for d, current, next_zone in to_move:
+            if next_zone != self.graph.end:
+                next_zone.add_drone(d.id)
+            if current != self.graph.start:
+                current.remove_drone(d.id)
+            d.move()
+            line = f"D{d.id}-{next_zone.name}"
+            output_lines.append(line)
+        return output_lines
+
+    def run(self):
+        max_turns = 100
+        while not self.all_arrived() and self.turn_count < max_turns:
+           moves = self.take_turn()
+           line = " ".join(moves)
+           print(line)
+           self.turn_count += 1
+    
