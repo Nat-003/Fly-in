@@ -160,7 +160,7 @@ class Graph:
             raise ValueError('no start zone')
         if self.end is None:
             raise ValueError('no end zone')
-        if self.nb_drones <= 1:
+        if self.nb_drones < 1:
             raise ValueError("Number of drones cannot be less than 1")
 
 
@@ -226,27 +226,58 @@ class Simulation:
     def all_arrived(self) -> bool:
         return all(d.has_arrived() for d in self.drones)
 
-    def take_turn(self):
-        to_move = []
+    def take_turn(self) -> list[str]:
         output_lines = []
+        acted = set()  # drones that already did something this turn
+
+        # ---- PHASE 1: land drones finishing their transit ----
+        for d in self.drones:
+            if d.is_in_transit():
+                d.tick()
+                if d.turn_remaining == 0:
+                    d.land(d.in_transit)
+                    landed = d.get_current_zone()
+                    if landed is not self.graph.end:
+                        landed.add_drone(d.id)
+                    output_lines.append(f"D{d.id}-{d.get_current_zone().name}")
+                    acted.add(d.id)
+
+        # ---- PHASE 2: projected occupancy + link usage, incl. reservations ----
         projected = {zone: zone.occupancy() for zone in self.graph.zones.values()}
         link_projected = {}
+        for d in self.drones:
+            if d.is_in_transit():
+                projected[d.get_next_zone()] += 1
+                link_projected[d.in_transit] = link_projected.get(d.in_transit, 0) + 1
+
+        # ---- PHASE 3: plan moves for free drones ----
+        to_move = []
+        to_launch = []
         for d in sorted(self.drones, key=lambda dr: dr.path_index, reverse=True):
             if d.has_arrived():
+                continue
+            if d.is_in_transit():
+                continue
+            if d.id in acted:          # landed this turn — don't move again
                 continue
             current = d.get_current_zone()
             next_zone = d.get_next_zone()
             connection = self.graph.get_connection(current, next_zone)
-            if next_zone == self.graph.end and link_projected.get(connection, 0) < connection.max_link_capacity:
+
+            link_ok = link_projected.get(connection, 0) < connection.max_link_capacity
+            room_ok = (next_zone == self.graph.end
+                    or projected[next_zone] < next_zone.max_cap)
+            if not (room_ok and link_ok):
+                continue
+            if next_zone.zone_type == "restricted":
+                to_launch.append((d, current, connection))
+            else:
                 to_move.append((d, current, next_zone))
-                projected[current] -= 1
+            if next_zone != self.graph.end:
                 projected[next_zone] += 1
-                link_projected[connection] = link_projected.get(connection, 0) + 1
-            elif projected[next_zone] < next_zone.max_cap and link_projected.get(connection, 0) < connection.max_link_capacity:
-                to_move.append((d, current, next_zone))
-                projected[current] -= 1
-                projected[next_zone] += 1
-                link_projected[connection] = link_projected.get(connection, 0) + 1
+            if current != self.graph.start: 
+                projected[d.get_current_zone()] -= 1
+            link_projected[connection] = link_projected.get(connection, 0) + 1
         for d, current, next_zone in to_move:
             if next_zone != self.graph.end:
                 next_zone.add_drone(d.id)
@@ -255,50 +286,12 @@ class Simulation:
             d.move()
             line = f"D{d.id}-{next_zone.name}"
             output_lines.append(line)
-        return output_lines
-
-    def take_turn(self) -> list[str]:
-        output_lines = []
-        for d in self.drones:
-            if d.is_in_transit():
-                d.tick()
-                if d.turn_remaining == 0:
-                    d.land(d.in_transit)
-                    line = f"D{d.id}-{d.get_current_zone().name}"
-                    output_lines.append(line)
-        projected = {zone: zone.occupancy() for zone in self.graph.zones.values()}
-        for d in self.drones:
-            if d.in_transit:
-                projected[d.get_next_zone()] += 1
-        link_projected = {}
-
-        # ---- PHASE 3: plan moves for free drones (skip transit drones) ----
-        to_move = []
-        to_launch = []
-        for d in sorted(self.drones, key=lambda dr: dr.path_index, reverse=True):
-            if d.has_arrived():
-                continue
-            if d.is_in_transit():
-                continue
-            current = d.get_current_zone()
-            next_zone = d.get_next_zone()
-            connection = self.graph.get_connection(current, next_zone)
-            link_ok = link_projected.get(connection, 0) < connection.max_link_capacity
-            if next_zone.zone_type == "restricted":
-                if next_zone == self.graph.end and projected[next_zone] < next_zone.max_cap and link_ok:
-                    to_launch.append(d, 0)
-
-        # ---- PHASE 4: commit ----
-        for item in to_move:
-            # TODO: item needs to carry whether it's a LAUNCH or a NORMAL move.
-            #   NORMAL: next_zone.add_drone(d.id) (if not end),
-            #           current.remove_drone(d.id) (if not start), d.move(),
-            #           output D<id>-<next_zone.name>
-            #   LAUNCH: d.board_connection(connection),
-            #           current.remove_drone(d.id) (if not start),
-            #           output D<id>-<connection.name>   (connection, not zone!)
-            pass
-
+        for d, current, connection in to_launch:
+            d.board_connection(connection)
+            if current != self.graph.start:
+                current.remove_drone(d.id)
+            line = f"D{d.id}-{connection.zone_a.name}-{connection.zone_b.name}"
+            output_lines.append(line)
         return output_lines
 
     def run(self):
@@ -308,3 +301,4 @@ class Simulation:
            line = " ".join(moves)
            print(line)
            self.turn_count += 1
+        print(f"number of turn {self.turn_count}")

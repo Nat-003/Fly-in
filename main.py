@@ -7,16 +7,12 @@ def main():
     # zone_2 = Zone('oui',(0, 1), 'normal', 1, 'red')
     # print(zone_1.name)
     try:
-        parser = Parser("maps/easy/01_linear_path.txt")
+        parser = Parser("maps/hard/03_ultimate_challenge.txt")
         graph =  parser.parse()
         pathfinder = Pathfinder(graph)
         # pathfinder.find_path()
         sim = Simulation(graph, pathfinder)
         sim.run()
-
-        
-        
-
     except ValueError as e:
         print(e)
 if __name__ == "__main__":
