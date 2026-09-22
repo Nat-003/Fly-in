@@ -136,6 +136,13 @@ class Graph:
         self.adjacency[connection.zone_a.name].append(connection)
         self.adjacency[connection.zone_b.name].append(connection)
 
+    def get_connection(self, zone_a: Zone, zone_b: Zone):
+        connections = self.adjacency[zone_a.name]
+        for c in connections:
+            if c.end_point(zone_a) == zone_b:
+                return c
+        raise ValueError("No connection found")
+
     def get_zone(self, name: str) -> Zone:
         zone = self.zones.get(name)
         if zone is None:
@@ -162,6 +169,8 @@ class Drone:
         self.id = id
         self.path = path
         self.path_index = 0
+        self.in_transit = None
+        self.turn_remaining = 0
 
     def get_current_zone(self) -> Zone:
         return self.path[self.path_index]
@@ -181,6 +190,24 @@ class Drone:
         else:
             return False
 
+    def is_in_transit(self) -> bool:
+        if self.in_transit is None:
+            return False
+        else:
+            return True
+
+    def board_connection(self, connection: Connection) -> None:
+        connection.add_drone(self.id)
+        self.in_transit = connection
+        self.turn_remaining = 1
+
+    def land(self, connection: Connection) -> None:
+        connection.remove_drone(self.id)
+        self.in_transit = None
+        self.move()
+
+    def tick(self) -> None:
+        self.turn_remaining -= 1
 
 class Simulation:
     def __init__(self, graph: Graph, pathfinder: Any):
@@ -203,19 +230,23 @@ class Simulation:
         to_move = []
         output_lines = []
         projected = {zone: zone.occupancy() for zone in self.graph.zones.values()}
+        link_projected = {}
         for d in sorted(self.drones, key=lambda dr: dr.path_index, reverse=True):
             if d.has_arrived():
                 continue
             current = d.get_current_zone()
             next_zone = d.get_next_zone()
-            if next_zone == self.graph.end:
+            connection = self.graph.get_connection(current, next_zone)
+            if next_zone == self.graph.end and link_projected.get(connection, 0) < connection.max_link_capacity:
                 to_move.append((d, current, next_zone))
                 projected[current] -= 1
                 projected[next_zone] += 1
-            elif projected[next_zone] < next_zone.max_cap:
+                link_projected[connection] = link_projected.get(connection, 0) + 1
+            elif projected[next_zone] < next_zone.max_cap and link_projected.get(connection, 0) < connection.max_link_capacity:
                 to_move.append((d, current, next_zone))
                 projected[current] -= 1
                 projected[next_zone] += 1
+                link_projected[connection] = link_projected.get(connection, 0) + 1
         for d, current, next_zone in to_move:
             if next_zone != self.graph.end:
                 next_zone.add_drone(d.id)
@@ -226,6 +257,50 @@ class Simulation:
             output_lines.append(line)
         return output_lines
 
+    def take_turn(self) -> list[str]:
+        output_lines = []
+        for d in self.drones:
+            if d.is_in_transit():
+                d.tick()
+                if d.turn_remaining == 0:
+                    d.land(d.in_transit)
+                    line = f"D{d.id}-{d.get_current_zone().name}"
+                    output_lines.append(line)
+        projected = {zone: zone.occupancy() for zone in self.graph.zones.values()}
+        for d in self.drones:
+            if d.in_transit:
+                projected[d.get_next_zone()] += 1
+        link_projected = {}
+
+        # ---- PHASE 3: plan moves for free drones (skip transit drones) ----
+        to_move = []
+        to_launch = []
+        for d in sorted(self.drones, key=lambda dr: dr.path_index, reverse=True):
+            if d.has_arrived():
+                continue
+            if d.is_in_transit():
+                continue
+            current = d.get_current_zone()
+            next_zone = d.get_next_zone()
+            connection = self.graph.get_connection(current, next_zone)
+            link_ok = link_projected.get(connection, 0) < connection.max_link_capacity
+            if next_zone.zone_type == "restricted":
+                if next_zone == self.graph.end and projected[next_zone] < next_zone.max_cap and link_ok:
+                    to_launch.append(d, 0)
+
+        # ---- PHASE 4: commit ----
+        for item in to_move:
+            # TODO: item needs to carry whether it's a LAUNCH or a NORMAL move.
+            #   NORMAL: next_zone.add_drone(d.id) (if not end),
+            #           current.remove_drone(d.id) (if not start), d.move(),
+            #           output D<id>-<next_zone.name>
+            #   LAUNCH: d.board_connection(connection),
+            #           current.remove_drone(d.id) (if not start),
+            #           output D<id>-<connection.name>   (connection, not zone!)
+            pass
+
+        return output_lines
+
     def run(self):
         max_turns = 100
         while not self.all_arrived() and self.turn_count < max_turns:
@@ -233,4 +308,3 @@ class Simulation:
            line = " ".join(moves)
            print(line)
            self.turn_count += 1
-    
