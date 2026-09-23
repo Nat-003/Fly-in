@@ -1,4 +1,5 @@
 from typing import Any 
+from visualizer import Visualiser
 
 class Zone:
     VALID_ZONE = ('normal', 'restricted', 'priority', 'blocked')
@@ -216,7 +217,7 @@ class Simulation:
         self.path = pathfinder.find_path()
         self.drones: list[Drone] = []
         self.create_drones()
-        self.turn_count = 0
+        self.turn_count = 1
 
     def create_drones(self) -> None:
         for n in range(1, self.graph.nb_drones + 1):
@@ -279,26 +280,30 @@ class Simulation:
                 projected[d.get_current_zone()] -= 1
             link_projected[connection] = link_projected.get(connection, 0) + 1
         for d, current, next_zone in to_move:
-            if next_zone != self.graph.end:
-                next_zone.add_drone(d.id)
             if current != self.graph.start:
                 current.remove_drone(d.id)
+        for d, current, connection in to_launch:
+                    if current != self.graph.start:
+                        current.remove_drone(d.id)
+        for d, current, next_zone in to_move:
+            if next_zone != self.graph.end:
+                next_zone.add_drone(d.id)
             d.move()
             line = f"D{d.id}-{next_zone.name}"
             output_lines.append(line)
         for d, current, connection in to_launch:
             d.board_connection(connection)
-            if current != self.graph.start:
-                current.remove_drone(d.id)
             line = f"D{d.id}-{connection.zone_a.name}-{connection.zone_b.name}"
             output_lines.append(line)
         return output_lines
 
     def run(self):
         max_turns = 100
+        visu = Visualiser(self.graph, self.drones)
         while not self.all_arrived() and self.turn_count < max_turns:
            moves = self.take_turn()
+           visu.render(self.turn_count, moves)
            line = " ".join(moves)
-           print(line)
+        #    print(line)
            self.turn_count += 1
         print(f"number of turn {self.turn_count}")

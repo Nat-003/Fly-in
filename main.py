@@ -1,19 +1,21 @@
-from classes import Zone, Connection, Graph, Simulation
+from classes import Simulation
 from parser import Parser
 from pathfind import Pathfinder
+import sys
+
 
 def main():
-    # zone_1 = Zone('test',(0, 0), 'normal', 1, 'red')
-    # zone_2 = Zone('oui',(0, 1), 'normal', 1, 'red')
-    # print(zone_1.name)
-    try:
-        parser = Parser("maps/hard/03_ultimate_challenge.txt")
-        graph =  parser.parse()
-        pathfinder = Pathfinder(graph)
-        # pathfinder.find_path()
-        sim = Simulation(graph, pathfinder)
-        sim.run()
-    except ValueError as e:
-        print(e)
+    if len(sys.argv) != 2:
+        print("Please provide a map path; usage: python main.py <map_file>")
+    else:
+        try:
+            parser = Parser(sys.argv[1])
+            graph =  parser.parse()
+            pathfinder = Pathfinder(graph)
+            sim = Simulation(graph, pathfinder)
+            sim.run()
+        except (ValueError, FileNotFoundError, PermissionError) as e:
+            print(e)
+
 if __name__ == "__main__":
     main()
