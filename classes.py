@@ -214,15 +214,24 @@ class Simulation:
     def __init__(self, graph: Graph, pathfinder: Any):
         self.graph = graph
         self.pathfinder = pathfinder
-        self.path = pathfinder.find_path()
+        self.paths = pathfinder.find_paths()
         self.drones: list[Drone] = []
         self.create_drones()
         self.turn_count = 1
 
     def create_drones(self) -> None:
+        lengths = [sum(z.movement_cost() for z in p) for p in self.paths]
+        counts = [0] * len(self.paths)            
         for n in range(1, self.graph.nb_drones + 1):
-            self.drones.append(Drone(n, self.path))
-
+            best_i = 0
+            best_score = lengths[0] + counts[0]
+            for i in range(1, len(self.paths)):
+                score = lengths[i] + counts[i]
+                if score < best_score:
+                    best_score = score
+                    best_i = i
+            counts[best_i] += 1
+            self.drones.append(Drone(n, self.paths[best_i]))
 
     def all_arrived(self) -> bool:
         return all(d.has_arrived() for d in self.drones)
