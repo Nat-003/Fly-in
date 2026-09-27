@@ -110,12 +110,11 @@ def draw(
     pos: dict[str, tuple[int, int]],
     font: pygame.font.Font,
     small: pygame.font.Font,
+    zone_font: pygame.font.Font,
     turn: int,
     finished: bool,
 ) -> None:
     screen.fill(BG)
-
-    # --- edges first, so nodes sit on top ---
     drawn = set()
     for name, conns in graph.adjacency.items():
         for c in conns:
@@ -126,15 +125,6 @@ def draw(
             a = pos[c.zone_a.name]
             b = pos[c.zone_b.name]
             pygame.draw.line(screen, EDGE, a, b, 3)
-            # connection label "<from>-<to>" at the midpoint
-            mid = ((a[0] + b[0]) // 2, (a[1] + b[1]) // 2)
-            label = f"{c.zone_a.name}-{c.zone_b.name}"
-            surf = small.render(label, True, EDGE_LABEL)
-            rect = surf.get_rect(center=mid)
-            # slight background pad so it's readable over the line
-            pad = rect.inflate(6, 2)
-            pygame.draw.rect(screen, BG, pad)
-            screen.blit(surf, rect)
 
             # drones in transit on this connection: draw along the line
             transit = drones_in_transit_on(c, drones)
@@ -151,9 +141,9 @@ def draw(
         cx, cy = pos[z.name]
         pygame.draw.circle(screen, zone_color(z), (cx, cy), ZONE_RADIUS)
         pygame.draw.circle(screen, ZONE_OUTLINE, (cx, cy), ZONE_RADIUS, 2)
-        # zone name just above the circle
-        nlabel = font.render(z.name, True, TEXT)
-        screen.blit(nlabel, nlabel.get_rect(center=(cx, cy - ZONE_RADIUS - 12)))
+        # zone name just above the circle (small font so dense maps stay legible)
+        nlabel = zone_font.render(z.name, True, TEXT)
+        screen.blit(nlabel, nlabel.get_rect(center=(cx, cy - ZONE_RADIUS - 8)))
 
         # drones sitting in this zone (occupants are ids)
         occ = z.occupants
@@ -227,6 +217,7 @@ def main() -> None:
     clock = pygame.time.Clock()
     font = pygame.font.SysFont("consolas,menlo,monospace", 18)
     small = pygame.font.SysFont("consolas,menlo,monospace", 14)
+    zone_font = pygame.font.SysFont("consolas,menlo,monospace", 11)
 
     pos = compute_positions(sim.graph)
     turn = 0
@@ -251,7 +242,7 @@ def main() -> None:
                     turn = 0
                     finished = sim.all_arrived()
 
-        draw(screen, sim.graph, sim.drones, pos, font, small, turn, finished)
+        draw(screen, sim.graph, sim.drones, pos, font, small, zone_font, turn, finished)
         pygame.display.flip()
         clock.tick(FPS)
 

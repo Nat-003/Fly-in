@@ -15,11 +15,8 @@ class Parser():
             pass
         else:
             raise ValueError(f"line {line_nb}: unrecognized zone prefix")
-        # everything after the prefix, split into fields
         body = line_text.split(":", 1)[1].strip()
-        # print(body)
         data = body.split()
-        # print(data)
         if len(data) < 3:
             raise ValueError(f"error while parsing line {line_nb}: Missing field")
 
@@ -70,7 +67,7 @@ class Parser():
             metadata = metadata_raw.split()
             for m in metadata:
                 if len(m.split("=")) != 2:
-                    raise ValueError("Eroor")
+                    raise ValueError(f"error while parsing line {line_nb}: malformed metadata '{m}' (expected key=value)")
                 key, val = m.split("=")
                 if key == "max_drones" or key == "max_link_capacity":
                     try:
@@ -87,7 +84,7 @@ class Parser():
 
     def _parse_connection(self, line_text: str, line_nb: int, graph: Graph) -> None:
         if len(line_text.split(":")) != 2:
-            raise ValueError("test")
+            raise ValueError(f"error while parsing line {line_nb}: malformed connection line (expected 'connection: <name1>-<name2>')")
         line = line_text.split(":")
         body = line[1].strip()
         data = body.split()
@@ -118,7 +115,6 @@ class Parser():
                 for line_nb, line_text in enumerate(f, start=1):
                     if line_text.startswith('#') or line_text.startswith("\n"):
                         continue
-                     #must split this part in helper function frome here to 
                     if line_text.startswith("nb_drones"):
                         clean_line = line_text.strip()
                         value = clean_line.split(':')
@@ -129,7 +125,6 @@ class Parser():
                         if numerical_value < 1:
                             raise ValueError(f'error while parsing line {line_nb}: Expected a positive number')
                         graph.nb_drones = numerical_value
-                    #here
                     elif line_text.startswith("start_hub:"):
                         self._parse_zone(line_text, line_nb, graph)
                     elif line_text.startswith("end_hub:"):
@@ -138,8 +133,8 @@ class Parser():
                         self._parse_zone(line_text, line_nb, graph)
                     elif line_text.startswith("connection"):
                         self._parse_connection(line_text, line_nb, graph)
-                    # else:
-                    #     raise ValueError(f"line {line_nb}: line invalid")
+                    else:
+                        raise ValueError(f"line {line_nb}: line invalid")
                 graph.validate()
             return graph                   
         except (FileNotFoundError, PermissionError) as e:

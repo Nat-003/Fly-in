@@ -42,11 +42,11 @@ class Zone:
 
     def movement_cost(self) -> int:
         if self.zone_type == 'normal':
-            return 1
+            return 10
         elif self.zone_type == 'restricted':
-            return 2
+            return 20
         elif self.zone_type == 'priority':
-            return 1
+            return 9
         else:
             return 1
 
@@ -215,9 +215,11 @@ class Simulation:
         self.graph = graph
         self.pathfinder = pathfinder
         self.paths = pathfinder.find_paths()
+        if not self.paths:
+            raise ValueError("No path from start to end")
         self.drones: list[Drone] = []
         self.create_drones()
-        self.turn_count = 1
+        self.turn_count = 0
 
     def create_drones(self) -> None:
         lengths = [sum(z.movement_cost() for z in p) for p in self.paths]
@@ -238,9 +240,7 @@ class Simulation:
 
     def take_turn(self) -> list[str]:
         output_lines = []
-        acted = set()  # drones that already did something this turn
-
-        # ---- PHASE 1: land drones finishing their transit ----
+        acted = set()
         for d in self.drones:
             if d.is_in_transit():
                 d.tick()
@@ -251,16 +251,12 @@ class Simulation:
                         landed.add_drone(d.id)
                     output_lines.append(f"D{d.id}-{d.get_current_zone().name}")
                     acted.add(d.id)
-
-        # ---- PHASE 2: projected occupancy + link usage, incl. reservations ----
         projected = {zone: zone.occupancy() for zone in self.graph.zones.values()}
         link_projected = {}
         for d in self.drones:
             if d.is_in_transit():
                 projected[d.get_next_zone()] += 1
                 link_projected[d.in_transit] = link_projected.get(d.in_transit, 0) + 1
-
-        # ---- PHASE 3: plan moves for free drones ----
         to_move = []
         to_launch = []
         for d in sorted(self.drones, key=lambda dr: dr.path_index, reverse=True):
@@ -268,7 +264,7 @@ class Simulation:
                 continue
             if d.is_in_transit():
                 continue
-            if d.id in acted:          # landed this turn — don't move again
+            if d.id in acted:
                 continue
             current = d.get_current_zone()
             next_zone = d.get_next_zone()
@@ -311,8 +307,8 @@ class Simulation:
         visu = Visualiser(self.graph, self.drones)
         while not self.all_arrived() and self.turn_count < max_turns:
            moves = self.take_turn()
-           visu.render(self.turn_count, moves)
+           visu.render(self.turn_count + 1, moves)
            line = " ".join(moves)
-        #    print(line)
+           print(line)
            self.turn_count += 1
         print(f"number of turn {self.turn_count}")
